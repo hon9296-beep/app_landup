@@ -1,0 +1,90 @@
+# env (모든 위치)
+.env
+.env.*
+**/.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+dist/
+
+# Docker
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 키페어 / 인증
+*.pem
+*accessKeys*
+*accesskeys*
+
+# 디버그 덤프
+backend/python/debug_logs/
+backend/python/app/debug_logs/
+# 1-2 (#520 후속) — sub-graph 노드별 결정 사유 (라이브 검증 visibility 용, 로컬만)
+backend/python/debug_logs/sub_graph_reasons/
+
+# Java 빌드/업로드/컴파일 산출물
+backend/java/bin/
+backend/java/build/
+backend/java/.gradle/
+backend/java/uploads/
+*.class
+*.jar
+
+# 문서 전체 — 팀 공유는 별도 채널, Git 은 코드만
+/docs/
+
+# AI 도구 설정 (팀원별 개인 설정)
+CLAUDE.md
+.claude/
+.cursorrules
+.cursor/
+.copilot/
+.aider*
+.continue/
+
+# 로컬 파일
+backend/python/uploads/
+backend/python/cache/
+backend/uploads/
+backend/cache/
+
+# references 폴더 (2026-05-18 종결 시점 — git 추적 해제, 로컬만)
+references/
+backend/python/references/
+
+# Gradle 로컬 설치
+gradle-*/
+gradle.zip
+gradle-*.zip
+
+# 로컬 전용 (커밋 제외)
+frontend/public/*.mp4
+code_book/
+reports/
+팀원 전달용/
+postman/
+.postman/
+
+# 로컬 테스트 환경 (각자 환경 다름, merge 방지)
+# vite.config.ts 는 VITE_API_TARGET env 로 분기되므로 git 추적 (2026-04-22 해제)
+*.sqlite3
+application-local.yml
+
+# LangGraph Studio dev server 캐시 (langgraph dev 실행 시 생성, 매번 갱신)
+.langgraph_api/
+</content>
+</invoke>

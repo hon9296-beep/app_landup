@@ -1,0 +1,21 @@
+# Windows 환경에서 checkout 시 gradlew 같은 쉘 스크립트가 CRLF로 저장되면
+# Docker(Linux) 빌드 시 `./gradlew: /bin/sh^M: bad interpreter` 에러 발생.
+# Docker에 들어가는 파일은 전부 LF 강제.
+
+*.sh      text eol=lf
+gradlew   text eol=lf
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+
+# 바이너리는 text 처리 방지
+*.jar     binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.pdf     binary
+*.dxf     binary
+*.dwg     binary
+*.glb     binary
+*.gltf    binary

@@ -1,0 +1,64 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.4.5'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.landup'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '21'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // JSON (Jackson)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    // MySQL
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // Spring Security (JWT 인증 필터)
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // HTTP 클라이언트 (Python 서버 호출)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // Redis (비동기 작업 큐 — B안)
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // Gmail SMTP (이메일 인증)
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
+    // AWS S3 (박물관 원본 이관 — floor_archive / brand_archive, 2026-04-27 추가)
+    implementation platform('software.amazon.awssdk:bom:2.25.0')
+    implementation 'software.amazon.awssdk:s3'
+
+    // Lombok (Java 24 호환 버전 명시)
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+
+    // 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'com.h2database:h2'  // 테스트용 인메모리 DB (MySQL 없이 기동)
+}
+
+// Spring Boot 3.x + JUnit Jupiter 플랫폼 명시 — 없으면 @Test 가 인식 안 됨
+test {
+    useJUnitPlatform()
+}

@@ -1,0 +1,113 @@
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+    env_file:
+      - ./frontend/.env  # VITE_* 단일 진실 소스 (Vite 표준 위치)
+      - .env             # 백엔드 공통 (DB / API key 등 — frontend 에서 거의 안 씀)
+    environment:
+      VITE_API_TARGET: http://backend-java:8080
+    profiles: ["frontend", "full"]
+
+  # ── Python 배치 엔진 (기존 단독 실행용) ──────────────────────────────
+  backend:
+    build: ./backend/python
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+      # Python → Java internal API (ref_image_client / register_ref_image / S3 upload)
+      JAVA_API_BASE: http://backend-java:8080/api
+    volumes:
+      - ./backend/python:/app
+      - ./references:/references
+    depends_on:
+      - redis
+    profiles: ["backend", "full"]
+
+  # ── Java 백엔드 (프론트 → Java → Python 엔진 프록시) ─────────────────
+  # DB 는 AWS RDS 연결 — .env 의 DB_HOST/DB_USER/DB_PASSWORD/DB_NAME 사용
+  backend-java:
+    build: ./backend/java
+    ports:
+      - "8081:8080"
+    env_file:
+      - .env
+    environment:
+      SERVER_PORT: 8080
+      PLACEMENT_ENGINE_URL: http://placement-engine:8000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      UPLOAD_DIR: /app/uploads
+      TZ: Asia/Seoul
+      GMAIL_USER: ${GMAIL_USER:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      placement-engine:
+        condition: service_started
+      redis:
+        condition: service_started
+    profiles: ["backend-java", "full"]
+
+  # ── Python 배치 엔진 (Java 연동용 — 기존 api.py 그대로 사용) ─────────
+  placement-engine:
+    build: ./backend/python
+    ports:
+      - "8002:8000"
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+    volumes:
+      - ./backend/python:/app
+      - ./references:/references
+    depends_on:
+      - redis
+    profiles: ["backend-java", "full"]
+
+  # ── Redis (arq 큐 브로커) ──────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    profiles: ["backend", "backend-java", "full"]
+
+  # ── 배치 워커 (Redis BRPOP 기반 비동기 작업 처리) ─────────────────
+  worker:
+    build: ./backend/python
+    command: ["python", "-m", "app.worker"]
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Python → Java internal API (ref_image_client / register_ref_image / S3 upload / 분석 영속)
+      JAVA_API_BASE: http://backend-java:8080/api
+    volumes:
+      - ./backend/python:/app
+      - ./references:/references
+    depends_on:
+      - redis
+    profiles: ["backend-java", "full"]
+
+volumes:
+  redis-data:

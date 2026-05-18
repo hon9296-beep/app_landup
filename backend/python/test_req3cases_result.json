@@ -1,0 +1,71 @@
+{
+  "base_placed_types": {
+    "photo_wall": 1,
+    "counter": 1,
+    "display_table": 2,
+    "banner_stand": 2,
+    "shelf_3tier": 1
+  },
+  "tests": {
+    "상품진열대 두개 제거해줘": {
+      "status": "FAIL",
+      "verdict": "FAIL — 제거 안 됨 (오히려 0개 동일)",
+      "placed_count": 7,
+      "failed_count": 0,
+      "type_counts": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 2,
+        "banner_stand": 2,
+        "shelf_3tier": 1
+      },
+      "type_counts_base": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 2,
+        "banner_stand": 2,
+        "shelf_3tier": 1
+      }
+    },
+    "계산대 입구쪽으로 옮겨줘": {
+      "status": "PARTIAL",
+      "verdict": "PARTIAL — counter는 있으나 입구존 확인 불가",
+      "placed_count": 7,
+      "failed_count": 0,
+      "type_counts": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 2,
+        "banner_stand": 2,
+        "shelf_3tier": 1
+      },
+      "type_counts_base": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 2,
+        "banner_stand": 2,
+        "shelf_3tier": 1
+      }
+    },
+    "3단 선반을 하나 추가해주고, 진열대를 하나 제거해줘": {
+      "status": "FAIL",
+      "verdict": "FAIL — 둘 다 실패 (shelf_added=0, dt_removed=0)",
+      "placed_count": 7,
+      "failed_count": 0,
+      "type_counts": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 2,
+        "banner_stand": 2,
+        "shelf_3tier": 1
+      },
+      "type_counts_base": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 2,
+        "banner_stand": 2,
+        "shelf_3tier": 1
+      }
+    }
+  }
+}

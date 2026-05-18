@@ -1,0 +1,110 @@
+services:
+  # ── Java 백엔드 (Nginx 뒤 — 외부 직접 노출 X) ──────
+  backend-java:
+    image: ${ECR_REGISTRY}/${ECR_JAVA_REPOSITORY}:latest
+    expose:
+      - "8080"
+    env_file:
+      - .env
+    environment:
+      # ── prod 환경 분기 값 (로컬과 다르게 가는 부분만) ──
+      FRONTEND_URL: https://landup.site         # 단일 도메인 진실 소스 — google/kakao redirect 자동 조립
+      JWT_COOKIE_SECURE: "true"                 # HTTPS 강제 (refresh 쿠키 secure 속성)
+      HIKARI_POOL_SIZE: "20"                    # DB pool (로컬 default 10 → prod 20)
+      HIBERNATE_TIMEZONE: Asia/Seoul            # KST
+      LOG_FILE: /var/log/landup/app.log         # 파일 로그 출력
+
+      # ── docker 내부 호스트명 / 포트 ──
+      SERVER_PORT: 8080
+      PLACEMENT_ENGINE_URL: http://placement-engine:8000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # ── 시크릿 / DB (env_file 안전장치 중복 명시) ──
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_S3_REGION: ${AWS_S3_REGION:-ap-northeast-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    depends_on:
+      placement-engine:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── Python 배치 엔진 (Java → Python 내부 호출) ────────
+  placement-engine:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_S3_REGION: ${AWS_S3_REGION:-ap-northeast-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    volumes:
+      - ./references:/references
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # ── Redis (arq 큐 브로커) ─────────────────────────────
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # ── 배치 워커 (Redis BRPOP 기반 비동기 작업 처리) ──────
+  worker:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+    command: ["python", "-m", "app.worker"]
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_S3_REGION: ${AWS_S3_REGION:-ap-northeast-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Python → Java internal API (ref_image_client / register_ref_image / S3 upload / 분석 영속)
+      JAVA_API_BASE: http://backend-java:8080/api
+    volumes:
+      - ./references:/references
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # ── Nginx + certbot (HTTPS 자동 발급/갱신) ─────────────
+  nginx:
+    image: jonasal/nginx-certbot:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CERTBOT_EMAIL: hon9296@gmail.com
+    volumes:
+      - ./nginx/user_conf.d:/etc/nginx/user_conf.d
+      - letsencrypt:/etc/letsencrypt
+    depends_on:
+      - backend-java
+      - placement-engine
+
+volumes:
+  redis-data:
+  letsencrypt:

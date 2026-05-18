@@ -1,0 +1,12 @@
+{
+  "dependencies": ["./backend/python"],
+  "graphs": {
+    "agent_graph": "./backend/python/app/nodes_small/agent_graph/__init__.py:AGENT_GRAPH",
+    "place_large": "./backend/python/app/graph.py:build_place_large_graph",
+    "space_data_large": "./backend/python/app/graph.py:build_space_data_large_graph",
+    "detect_large": "./backend/python/app/graph.py:build_detect_large_graph",
+    "large_full_DEAD": "./backend/python/app/graph.py:build_large_graph"
+  },
+  "env": ".env",
+  "python_version": "3.12"
+}

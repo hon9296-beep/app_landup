@@ -1,0 +1,189 @@
+name: CD
+
+on:
+  push:
+    branches: ["main"]
+
+env:
+  AWS_REGION: ap-northeast-2
+
+jobs:
+  # ── Frontend → S3 + CloudFront ──
+  frontend:
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build
+        run: npx vite build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_NAVER_CLIENT_ID: ${{ secrets.VITE_NAVER_CLIENT_ID }}
+          VITE_KAKAO_REST_API_KEY: ${{ secrets.VITE_KAKAO_REST_API_KEY }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_TOSS_CLIENT_KEY: ${{ secrets.VITE_TOSS_CLIENT_KEY }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to S3
+        run: aws s3 sync dist/ s3://${{ secrets.S3_BUCKET_NAME }} --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+
+  # ── Python 배치 엔진 → ECR ──
+  backend-python:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Python image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./backend/python
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./backend/python
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  # ── Java 백엔드 → ECR ──
+  backend-java:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Java image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_JAVA_REPOSITORY: ${{ secrets.ECR_JAVA_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_JAVA_REPOSITORY:$IMAGE_TAG ./backend/java
+          docker build -t $ECR_REGISTRY/$ECR_JAVA_REPOSITORY:latest ./backend/java
+          docker push $ECR_REGISTRY/$ECR_JAVA_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_JAVA_REPOSITORY:latest
+
+  # ── Python 배치 엔진 환경변수 목록 (EC2 .env / docker-compose.prod.yml 에 추가 필요) ──
+  # INTERNAL_API_KEY   : Java↔Python 내부 인증 키 (양쪽 동일 값, openssl rand -hex 32)
+  # ALLOWED_ORIGINS    : Java CORS 허용 출처 (예: https://landup.site)
+
+  # ── DB Seed (Python 상수 → catalog 7테이블 + brand_defaults 등 동기화) ──
+  # 배치 로직은 Python 상수(OBJECT_STANDARDS, VMD_BOUNDARIES, ...) 를 진실의 근원으로 삼고,
+  # DB catalog 는 그 미러. 매 배포마다 자동 실행해서 Python↔DB drift 를 원천 차단.
+  # ON DUPLICATE KEY UPDATE 멱등성 보장 (여러 번 돌려도 안전).
+  seed-db:
+    runs-on: ubuntu-latest
+    needs: [backend-python]
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install seeder dependencies
+        run: pip install -r backend/python/requirements.txt
+
+      - name: Run seeder
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        working-directory: backend/python
+        run: python scripts/seed_from_source.py
+
+  # ── EC2 배포 (Python + Java 동시) ──
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [backend-python, backend-java, seed-db]
+    environment: production
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+            cd ~
+            docker-compose -f docker-compose.prod.yml pull
+            docker-compose -f docker-compose.prod.yml up -d
+            # nginx + worker 재시작 — backend-java 컨테이너 IP 변경 시 캐싱 회피 (2026-05-01)
+            # nginx: upstream backend-java IP 캐싱
+            # worker: Python httpx connection pool 캐싱 (concept_area / ref_image client 등)
+            # redis 는 데이터 휘발 위험 있어서 재시작 X
+            docker-compose -f docker-compose.prod.yml restart nginx worker
+            docker image prune -f

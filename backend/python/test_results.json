@@ -1,0 +1,52 @@
+{
+  "base_placed": [
+    "photo_wall",
+    "counter",
+    "display_table",
+    "display_table",
+    "banner_stand",
+    "banner_stand",
+    "shelf_3tier"
+  ],
+  "tests": {
+    "계산대 입구 오른편으로 갖다놔주세요": {
+      "status": "PASS",
+      "verdict": "PASS",
+      "placed_count": 11,
+      "failed_count": 3,
+      "type_counts": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 3,
+        "banner_stand": 4,
+        "shelf_3tier": 2
+      }
+    },
+    "진열대 전부 제거해주세요": {
+      "status": "FAIL",
+      "verdict": "FAIL — display_table 3개 남음",
+      "placed_count": 11,
+      "failed_count": 3,
+      "type_counts": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 3,
+        "banner_stand": 4,
+        "shelf_3tier": 2
+      }
+    },
+    "3단선반 2개 추가해주세요": {
+      "status": "FAIL",
+      "verdict": "FAIL — shelf_3tier 1개 추가됨 (2개 필요)",
+      "placed_count": 11,
+      "failed_count": 3,
+      "type_counts": {
+        "photo_wall": 1,
+        "counter": 1,
+        "display_table": 3,
+        "banner_stand": 4,
+        "shelf_3tier": 2
+      }
+    }
+  }
+}
