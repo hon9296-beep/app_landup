@@ -37,6 +37,9 @@ public class DemoUserSeeder implements ApplicationRunner {
     @Value("${demo.user.name:Demo User}")
     private String demoName;
 
+    @Value("${demo.user.membership:basic}")
+    private String demoMembership;
+
     public DemoUserSeeder(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
@@ -49,8 +52,25 @@ public class DemoUserSeeder implements ApplicationRunner {
             return;
         }
 
-        if (userRepository.findByEmail(demoEmail).isPresent()) {
-            log.info("[DemoUserSeeder] 이미 존재 — skip (email={})", demoEmail);
+        User.Membership membership;
+        try {
+            membership = User.Membership.valueOf(demoMembership.trim().toLowerCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("[DemoUserSeeder] 잘못된 DEMO_USER_MEMBERSHIP={} → basic 으로 fallback", demoMembership);
+            membership = User.Membership.basic;
+        }
+
+        var existing = userRepository.findByEmail(demoEmail);
+        if (existing.isPresent()) {
+            // 이미 있으면 비번/이름/membership 갱신 (멱등 upsert).
+            // 시연용 계정이라 prod 운영 계정 침해 위험 X.
+            User u = existing.get();
+            u.setName(demoName);
+            u.setPassword(passwordEncoder.encode(demoPassword));
+            u.setMembership(membership);
+            u.setIsVerified(true);
+            userRepository.save(u);
+            log.info("[DemoUserSeeder] 시연 계정 갱신 — email={}, membership={}", demoEmail, membership);
             return;
         }
 
@@ -58,12 +78,12 @@ public class DemoUserSeeder implements ApplicationRunner {
                 .name(demoName)
                 .email(demoEmail)
                 .password(passwordEncoder.encode(demoPassword))
-                .membership(User.Membership.basic)
+                .membership(membership)
                 .isAdmin(false)
                 .isVerified(true)
                 .build();
 
         userRepository.save(demo);
-        log.info("[DemoUserSeeder] 시연 계정 생성 완료 — email={}", demoEmail);
+        log.info("[DemoUserSeeder] 시연 계정 생성 완료 — email={}, membership={}", demoEmail, membership);
     }
 }

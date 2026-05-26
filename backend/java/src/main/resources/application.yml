@@ -142,13 +142,15 @@ email:
     base-url: ${FRONTEND_URL:http://localhost:3000}
     expiry-minutes: ${EMAIL_VERIFY_EXPIRY_MIN:30}
 
-# 시연 계정 — 부팅 시 환경변수 박혀있으면 DemoUserSeeder 가 1회 자동 생성 (멱등).
-# 로컬/prod 둘 다 동일 패턴. 빈 값이면 seed skip.
+# 시연 계정 — 부팅 시 환경변수 박혀있으면 DemoUserSeeder 가 자동 생성/갱신 (멱등 upsert).
+# membership: basic / premium / max — 시연용으로 max 추천 (플랜 락 우회).
+# 로컬/prod 둘 다 동일 패턴. email/password 빈 값이면 seed skip.
 demo:
   user:
     email: ${DEMO_USER_EMAIL:}
     password: ${DEMO_USER_PASSWORD:}
     name: ${DEMO_USER_NAME:Demo User}
+    membership: ${DEMO_USER_MEMBERSHIP:basic}
 
 # JWT
 # 환경별 분기는 docker-compose.prod.yml 의 environment 가 담당.
