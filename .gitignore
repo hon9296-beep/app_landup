@@ -88,5 +88,9 @@ application-local.yml
 
 # LangGraph Studio dev server 캐시 (langgraph dev 실행 시 생성, 매번 갱신)
 .langgraph_api/
+
+# OpenClaw 작업물 (2026-05-26 면접 사전 과제 — 개인 자산, git 추적 X)
+review/
+agent/
 </content>
-</invoke>
+</invoke>demo-data/
