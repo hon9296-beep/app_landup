@@ -31,13 +31,12 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Build
+        # 2026-05-25: OAuth/Toss 시크릿 전부 제거 — 빈 값 빌드 시 Login.tsx / SignUp.tsx / PayPage 가 자동 비활성.
+        # 시연 로그인은 DemoUserSeeder 가 부팅 시 자동 생성한 계정 사용 (이메일/비번).
+        # 재활성화 시 GitHub Secrets 에 키 등록 + 본 env 블록에 줄 추가.
         run: npx vite build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_NAVER_CLIENT_ID: ${{ secrets.VITE_NAVER_CLIENT_ID }}
-          VITE_KAKAO_REST_API_KEY: ${{ secrets.VITE_KAKAO_REST_API_KEY }}
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
-          VITE_TOSS_CLIENT_KEY: ${{ secrets.VITE_TOSS_CLIENT_KEY }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -121,41 +120,13 @@ jobs:
   # INTERNAL_API_KEY   : Java↔Python 내부 인증 키 (양쪽 동일 값, openssl rand -hex 32)
   # ALLOWED_ORIGINS    : Java CORS 허용 출처 (예: https://landup.site)
 
-  # ── DB Seed (Python 상수 → catalog 7테이블 + brand_defaults 등 동기화) ──
-  # 배치 로직은 Python 상수(OBJECT_STANDARDS, VMD_BOUNDARIES, ...) 를 진실의 근원으로 삼고,
-  # DB catalog 는 그 미러. 매 배포마다 자동 실행해서 Python↔DB drift 를 원천 차단.
-  # ON DUPLICATE KEY UPDATE 멱등성 보장 (여러 번 돌려도 안전).
-  seed-db:
-    runs-on: ubuntu-latest
-    needs: [backend-python]
-    environment: production
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install seeder dependencies
-        run: pip install -r backend/python/requirements.txt
-
-      - name: Run seeder
-        env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        working-directory: backend/python
-        run: python scripts/seed_from_source.py
-
-  # ── EC2 배포 (Python + Java 동시) ──
+  # ── EC2 배포 (MySQL + Python + Java 동시) ──
+  # 2026-05-25 변경:
+  #   - DB 가 docker MySQL 로 전환 — seed-db 잡 별도 분리 폐기 (GitHub Runner 에서 RDS 외부 접속 불가).
+  #   - DB seed 는 EC2 안에서 `docker-compose exec` 로 실행 (mysql healthcheck 통과 후).
   deploy:
     runs-on: ubuntu-latest
-    needs: [backend-python, backend-java, seed-db]
+    needs: [backend-python, backend-java]
     environment: production
 
     steps:
@@ -177,13 +148,20 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
             aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
             cd ~
             docker-compose -f docker-compose.prod.yml pull
             docker-compose -f docker-compose.prod.yml up -d
+            # mysql healthcheck 통과 대기 (최초 부팅 시 init_v2.sql 적용 시간 포함)
+            echo "[deploy] waiting for mysql healthy..."
+            for i in $(seq 1 30); do
+              status=$(docker inspect -f '{{.State.Health.Status}}' $(docker-compose -f docker-compose.prod.yml ps -q mysql) 2>/dev/null || echo "starting")
+              if [ "$status" = "healthy" ]; then echo "[deploy] mysql healthy"; break; fi
+              sleep 5
+            done
+            # Python catalog 시드 (멱등 — ON DUPLICATE KEY UPDATE)
+            docker-compose -f docker-compose.prod.yml exec -T placement-engine python scripts/seed_from_source.py || echo "[deploy] seed skipped or failed — check logs"
             # nginx + worker 재시작 — backend-java 컨테이너 IP 변경 시 캐싱 회피 (2026-05-01)
-            # nginx: upstream backend-java IP 캐싱
-            # worker: Python httpx connection pool 캐싱 (concept_area / ref_image client 등)
-            # redis 는 데이터 휘발 위험 있어서 재시작 X
             docker-compose -f docker-compose.prod.yml restart nginx worker
             docker image prune -f

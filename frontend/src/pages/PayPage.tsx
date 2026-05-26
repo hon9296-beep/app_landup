@@ -40,6 +40,9 @@ const PLANS: Plan[] = [
 ];
 
 const TOSS_CLIENT_KEY = import.meta.env.VITE_TOSS_CLIENT_KEY ?? '';
+// 2026-05-25 시연용으로 토스 비활성 — 빈 값이면 결제 버튼 disabled + 상단 배너 노출.
+// 실제 결제 흐름 (Toss SDK 초기화 등) 도 SDK 호출 자체 차단.
+const TOSS_DISABLED = !TOSS_CLIENT_KEY;
 
 export default function PayPage() {
   const navigate = useNavigate();
@@ -100,6 +103,7 @@ export default function PayPage() {
   const handlePlanSelect = async (plan: Plan) => {
     if (!currentUser) { toast.error('로그인이 필요합니다'); return; }
     if (plan.amount === 0) { toast.info('해당 플랜은 무료이거나 별도 문의가 필요합니다'); return; }
+    if (TOSS_DISABLED) { toast.info('데모 환경에서 결제 기능은 비활성화되어 있습니다'); return; }
     setLoading(true);
     try {
       const { loadTossPayments } = await import('@tosspayments/payment-sdk');
@@ -128,6 +132,12 @@ export default function PayPage() {
           <p className="text-xs text-text-muted">AI가 최적화하는 팝업스토어 공간 설계, 나에게 맞는 플랜을 선택하세요</p>
           {!currentUser && <p className="text-xs text-amber-400 mt-1">로그인 필요</p>}
         </div>
+
+        {TOSS_DISABLED && (
+          <div className="mb-6 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-300 text-center">
+            데모 환경에서는 결제 기능이 비활성화되어 있습니다. 플랜 구조 및 UI 만 확인 가능.
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {PLANS.map(plan => (
@@ -164,6 +174,7 @@ export default function PayPage() {
                 disabled={
                   subLoading
                   || loading
+                  || (TOSS_DISABLED && plan.key !== 'basic')
                   || (!!currentUser && (
                     currentSub?.planKey === plan.key
                     || (plan.key === 'basic' && ['premium', 'max'].includes(currentSub?.planKey ?? ''))
@@ -183,6 +194,7 @@ export default function PayPage() {
                   ? '무료 플랜'
                   : currentUser && currentSub?.planKey === plan.key ? '구독 중'
                   : plan.key === 'premium' && currentSub?.planKey === 'max' ? '이전 플랜'
+                  : TOSS_DISABLED ? '데모 (결제 비활성)'
                   : loading ? '로딩 중...'
                   : '결제하기'}
               </button>

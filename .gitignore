@@ -43,6 +43,8 @@ backend/java/.gradle/
 backend/java/uploads/
 *.class
 *.jar
+# gradle wrapper jar 는 예외 — git 추적 필수 (없으면 ./gradlew 작동 X, docker build 깨짐)
+!backend/java/gradle/wrapper/gradle-wrapper.jar
 
 # 문서 전체 — 팀 공유는 별도 채널, Git 은 코드만
 /docs/

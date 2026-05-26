@@ -2,7 +2,11 @@ const NAVER_CLIENT_ID = import.meta.env.VITE_NAVER_CLIENT_ID as string
 const REDIRECT_URI    = `${window.location.origin}/naver/callback`
 
 /** 네이버 로그인 URL 생성 (state는 CSRF 방지용 랜덤값) */
-export function naverLoginUrl(): string {
+export function naverLoginUrl(): string | null {
+  if (!NAVER_CLIENT_ID) {
+    alert("네이버 로그인 준비 중 — Client ID 미등록")
+    return null
+  }
   const state = crypto.randomUUID()
   sessionStorage.setItem("naver_oauth_state", state)
   const params = new URLSearchParams({

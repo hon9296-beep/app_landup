@@ -21,8 +21,9 @@ services:
       REDIS_PORT: 6379
 
       # ── 시크릿 / DB (env_file 안전장치 중복 명시) ──
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT:-3306}
+      # DB_HOST 는 docker 내부 호스트명 mysql 강제 (env_file 의 값 무시)
+      DB_HOST: mysql
+      DB_PORT: "3306"
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -33,10 +34,41 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     depends_on:
+      mysql:
+        condition: service_healthy
       placement-engine:
         condition: service_started
       redis:
         condition: service_started
+    restart: unless-stopped
+
+  # ── MySQL 8 (RDS 대체 — EC2 안에서 컨테이너로 직접 운영) ─────────────
+  # 백업: cron + mysqldump → S3 (별도 운영 작업). volume 손실 = 데이터 손실.
+  # init_v2.sql 은 최초 부팅 시 1회만 적용 (mysql-data volume 비어있을 때).
+  mysql:
+    image: mysql:8.0
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+09:00
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./db/init_v2.sql:/docker-entrypoint-initdb.d/init_v2.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # start_period 60s: 첫 부팅 시 init_v2.sql (35테이블) 시간 여유 — EC2 첫 배포 race 방지.
+      start_period: 60s
     restart: unless-stopped
 
   # ── Python 배치 엔진 (Java → Python 내부 호출) ────────
@@ -107,4 +139,5 @@ services:
 
 volumes:
   redis-data:
+  mysql-data:
   letsencrypt:

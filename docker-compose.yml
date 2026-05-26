@@ -36,7 +36,7 @@ services:
     profiles: ["backend", "full"]
 
   # ── Java 백엔드 (프론트 → Java → Python 엔진 프록시) ─────────────────
-  # DB 는 AWS RDS 연결 — .env 의 DB_HOST/DB_USER/DB_PASSWORD/DB_NAME 사용
+  # DB 는 같은 compose 의 mysql 서비스 사용 (2026-05-25 RDS → docker MySQL 전환)
   backend-java:
     build: ./backend/java
     ports:
@@ -50,16 +50,54 @@ services:
       REDIS_PORT: 6379
       UPLOAD_DIR: /app/uploads
       TZ: Asia/Seoul
+      # DB — docker 내부 호스트명 mysql 로 override (env_file 에 박힌 값 무시)
+      DB_HOST: mysql
+      DB_PORT: "3306"
       GMAIL_USER: ${GMAIL_USER:-}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     volumes:
       - ./backend/uploads:/app/uploads
     depends_on:
+      mysql:
+        condition: service_healthy
       placement-engine:
         condition: service_started
       redis:
         condition: service_started
+    # mysql healthcheck race 대비: 첫 접속 실패 시 docker 가 자동 재시작.
+    restart: on-failure
+    profiles: ["backend-java", "full"]
+
+  # ── MySQL 8 (RDS 대체 — 로컬/EC2 동일 컨테이너) ───────────────────────
+  # init_v2.sql 은 컨테이너 최초 부팅 시 1회만 적용 (volume 비어있을 때).
+  # 스키마 변경 시 mysql-data volume 삭제 후 재기동 또는 수동 ALTER.
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-landup_root_pw}
+      MYSQL_DATABASE: ${DB_NAME:-landup}
+      MYSQL_USER: ${DB_USER:-landup}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-landup_pw}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+09:00
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./db/init_v2.sql:/docker-entrypoint-initdb.d/init_v2.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-landup_root_pw}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # start_period 60s: 첫 부팅 시 init_v2.sql (35테이블) 실행 + temp server 재기동 시간 여유.
+      # mysql-data volume 살아있는 2차 부팅부터는 의미 X (즉시 ready).
+      start_period: 60s
+    restart: unless-stopped
     profiles: ["backend-java", "full"]
 
   # ── Python 배치 엔진 (Java 연동용 — 기존 api.py 그대로 사용) ─────────
@@ -111,3 +149,4 @@ services:
 
 volumes:
   redis-data:
+  mysql-data:
