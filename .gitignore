@@ -92,5 +92,4 @@ application-local.yml
 # OpenClaw 작업물 (2026-05-26 면접 사전 과제 — 개인 자산, git 추적 X)
 review/
 agent/
-</content>
-</invoke>demo-data/
+demo-data/
